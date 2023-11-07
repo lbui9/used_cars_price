@@ -1,0 +1,295 @@
+---
+title: "Assignment 9: How much for that car?"
+author: "FirstName LastName"
+date: "`r Sys.Date()`"
+documentclass: article
+geometry: margin=1in
+fontsize: 11pt
+output:
+  pdf_document:
+    toc: false
+    df_print: kable
+    fig_caption: false
+    number_sections: false
+    dev: pdf
+    highlight: tango
+  html_document:
+    theme: default
+    self_contained: true
+    toc: false
+    df_print: kable
+    fig_caption: false
+    number_sections: false
+    smart: true
+    dev: svg
+---
+
+```{r setup, include = FALSE}
+# DO NOT ALTER THIS CHUNK
+knitr::opts_chunk$set(
+  echo = TRUE,
+  eval = TRUE,
+  fig.width = 5,
+  fig.asp = 0.618,
+  out.width = "70%",
+  dpi = 120,
+  fig.align = "center",
+  cache = FALSE
+)
+is_pdf <- try (("pdf_document" %in% rmarkdown::all_output_formats(knitr::current_input())), silent=TRUE)
+is_pdf <- (is_pdf == TRUE)
+# Load required packages
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(broom))
+suppressPackageStartupMessages(library(modelr))
+suppressPackageStartupMessages(library(plotly))
+# Load dataset
+car_prices <- read_rds("car_price_data.rds")
+```
+
+
+## Exercise 1
+
+i. The other continuous variable in this dataset is Mileage. 
+
+ii. 
+
+```{r}
+car_prices %>%
+  pivot_longer(cols = c('Liter', 'Mileage'), 
+               names_to = "names", 
+               values_to = "value") %>%
+  ggplot() +
+  geom_point(mapping = aes(x = value, y = Price)) +
+  facet_wrap(~ names, scales = "free_x") +
+  labs(title="Relationship between Price and explanatory variables")
+```
+
+
+## Exercise 2
+
+```{r}
+continuous_model <- lm(Price ~ Liter + Mileage, data = car_prices)
+```
+
+```{r}
+continuous_model %>%
+  tidy()
+```
+
+```{r}
+continuous_model %>%
+  glance() %>%
+  select(r.squared:statistic)
+```
+
+* R^2^ is a measure of how correlated the explanatory and response variables are. If R^2^ = 1, then all the points fall on a straight line. If R^2^ = 0, then there is no correlation between the variables. In our case, R^2^ = 0.3291279, which is closer to 0 than to 1. 
+
+## Exercise 3
+
+```{r}
+# predict model plane over values
+lit <- unique(car_prices$Liter)
+mil <- unique(car_prices$Mileage)
+grid <- with(car_prices, expand.grid(lit, mil))
+d <- setNames(data.frame(grid), c("Liter", "Mileage"))
+vals <- predict(continuous_model, newdata = d)
+
+# form surface matrix and give to plotly
+m <- matrix(vals, nrow = length(unique(d$Liter)), ncol = length(unique(d$Mileage)))
+p <- plot_ly() %>%
+  add_markers(
+    x = ~car_prices$Mileage, 
+    y = ~car_prices$Liter, 
+    z = ~car_prices$Price, 
+    marker = list(size = 1)
+    ) %>%
+  add_trace(
+    x = ~mil, y = ~lit, z = ~m, type="surface", 
+    colorscale=list(c(0,1), c("yellow","yellow")),
+    showscale = FALSE
+    ) %>%
+  layout(
+    scene = list(
+      xaxis = list(title = "mileage"),
+      yaxis = list(title = "liters"),
+      zaxis = list(title = "price")
+    )
+  )
+if (!is_pdf) {p}
+```
+
+* By examining and rotating the 3D plot, the model can describe the focus direction of the data, but it cannot accurately fit the entire data because the points are scattered relative to the location of the model. From the 3D graph, it seems like the model meets the assumption of linearity because there is no obvious curve in the relationship. The variability of the residuals (above and below the model surface) seems to be reasonably constant, and so this condition is met. To see if the Nearly normal residuals condition is met or not, a residuals distribution should be created. It is easier to see what's going on with a 2D univariate model than a 3D multivariate model since a 3D multivariate model requires to be seen from various angles. 
+
+## Exercise 4
+
+```{r}
+continuous_df <- car_prices %>%
+  add_predictions(continuous_model) %>%
+  add_residuals(continuous_model)
+```
+
+
+## Exercise 5
+
+```{r}
+continuous_df %>%
+  ggplot() +
+  geom_point(mapping = aes(x = pred, y = Price)) +
+  geom_abline(slope = 1, intercept = 0) +
+  labs(title = "observed vs. predicted plot for continuous variables",
+       x = "predicted",
+       y = "observed")
+```
+
+* There is not a obvious curve in the graph so this is a linear relationship. Hence, the linear model's assumption of linearity is met.
+
+## Exercise 6
+
+```{r}
+continuous_df %>%
+  ggplot() +
+  geom_point(mapping = aes(x = pred, y = resid)) +
+  geom_hline(yintercept = 0) +
+  labs(title = "residual vs. predicted plot for continuous variables",
+       x = "predicted",
+       y = "residual")
+```
+
+* It looks like the variability is reasonably constant all the way along the line except for a few outliers. This means that this model meets the 3rd condition of Constant Variability.
+
+## Exercise 7
+
+```{r}
+continuous_df %>%
+  ggplot() +
+  geom_qq(aes(sample = resid)) +
+  geom_qq_line(aes(sample = resid)) + 
+  labs(title = "Q-Q plot for residuals")
+```
+
+* The nearly-normal residuals condition appears to be violated since the data points are constantly deviating from the line.
+
+## Exercise 8
+
+```{r}
+car_prices %>%
+  ggplot() +
+  geom_boxplot(aes(x = Make, y = Price)) +
+  labs(x = "Make of car", title = "Effect of make of car on price")
+```
+
+```{r}
+car_prices %>%
+  ggplot() +
+  geom_boxplot(aes(x = reorder(Make, Price, FUN=median), y = Price)) +
+  labs(x = "Make of car", title = "Effect of make of car on price")
+```
+
+i. Saturn has the lowest median price.
+
+ii. Cadillac has the greatest interquartile range of prices.
+
+iii. Chevrolet, Pontiac, and Cadillac have outliers. 
+
+## Exercise 9
+
+```{r, fig.width = 9, fig.asp = 1.5}
+car_prices %>%
+  pivot_longer(
+    cols = -c('Price','Mileage','Liter'), 
+    names_to="name", 
+    values_to="value", 
+    values_transform = list(value = 'factor')
+    ) %>%
+  ggplot() +
+  geom_boxplot(aes(x = reorder(value, Price, FUN=median), y = Price)) +
+  facet_wrap(~name, scales = "free_x") +
+  labs(x = "Value", title = "Effect of characteristics of car on price")
+```
+
+
+
+## Exercise 10
+
+```{r}
+cars_factor_df <- car_prices %>%
+  mutate(Cylinder = as.factor(Cylinder))
+```
+
+i.
+
+```{r}
+mixed_model <- lm(Price ~ Mileage + Liter + Cylinder + Make + Type, 
+                  data = cars_factor_df) 
+```
+
+ii. 
+
+```{r}
+mixed_model %>%
+  tidy()
+```
+
+iii. 
+
+```{r}
+mixed_model %>%
+  glance() %>%
+  select(r.squared:statistic)
+```
+
+* The value of R^2^ of this model is 0.9389165.
+
+## Exercise 11
+
+i.
+
+```{r}
+mixed_df <- cars_factor_df %>%
+  add_predictions(mixed_model) %>%
+  add_residuals(mixed_model)
+```
+
+ii. 
+
+```{r}
+mixed_df %>%
+  ggplot() +
+  geom_point(mapping = aes(x = pred, y = Price)) +
+  geom_abline(slope = 1, intercept = 0) +
+  labs(title = "observed vs. predicted plot for category variables",
+       x = "predicted",
+       y = "observed")
+```
+
+iii. 
+
+```{r}
+mixed_df %>%
+  ggplot() +
+  geom_point(mapping = aes(x = pred, y = resid)) +
+  geom_hline(yintercept = 0) +
+  labs(title = "residual vs. predicted plot for category variables",
+       x = "predicted",
+       y = "residual")
+```
+
+iv. 
+
+```{r}
+mixed_df %>%
+  ggplot() +
+  geom_qq(aes(sample = resid)) +
+  geom_qq_line(aes(sample = resid)) + 
+  labs(title = "Q-Q plot for residuals")
+```
+
+## Exercise 12
+
+i. This mixed model is better than the simpler 2 variable model that we created earlier in the assignment. The value of R^2^ of this mixed model is 0.9389165, which is closer to 1 than to 0. The relationship between the observed and predicted is a linear relationship as there is no obvious curve in the relationship. Hence, the linear model's assumption of linearity is met. The 3rd condition of Constant Variability is met since it looks like the variability is reasonably constant all the way along the line except for a few outliers above (5000,10000). The nearly-normal residuals condition is met, too, since the majority of points fall in the straight line. 
+
+ii. I would use the mixed_model if I were picking a car because it reflects better the relationship between the price and characteristics of the car, hence, relfects better the price that the car deserves. According to the statistics and conclusions I have made in i. (R^2^ is close to 1, all of the 3 linear model's assumptions are met), the 5 explanatory variables I use for this mixed_model have a strong relationship with the Price of the car. 
+
+
+
